@@ -10,25 +10,45 @@ import androidx.navigation.NavController
 import com.profplay.isbasi.viewmodel.AuthViewModel
 import com.profplay.isbasi.viewmodel.HumansViewModel
 
+// EmployerScreen.kt
 @Composable
 fun EmployerScreen(
     navController: NavController,
-    humanViewModel: HumansViewModel,
+    humanViewModel: HumansViewModel, // Kendi profilini göstermek için
     authViewModel: AuthViewModel
 ) {
     val humanMe by humanViewModel.humanMe.collectAsState()
+    // Giriş yapan işverenin ID'sine ihtiyacımız var
+    val currentUserId = humanMe?.id
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text(
-            "İşveren Ekranı",
-            style = MaterialTheme.typography.titleLarge
-        )
+        Text("İşveren Ekranı", style = MaterialTheme.typography.titleLarge)
+
+        Text("Hoş geldin, ${humanMe?.name ?: currentUserId ?: "Kullanıcı"}")
+        Text("Rol: ${humanMe?.role}")
+
+        Spacer(modifier = Modifier.weight(1f)) // Butonları aşağı iter
+
+        // YENİ BUTON: Kendi işlerini listelemek için
+        Button(
+            onClick = {
+                if (currentUserId != null) {
+                    // JobListScreen'e MyJobs moduyla ve KENDİ ID'siyle git
+                    navController.navigate("job_list/${JobListLoadMode.MyJobs.name}?employerId=$currentUserId")
+                } else {
+                    // ID henüz yüklenmediyse bir uyarı verilebilir
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = currentUserId != null // ID yüklenene kadar pasif
+        ) {
+            Text("Yayınladığım İlanları Gör")
+        }
+
         Button(
             onClick = { navController.navigate("create_job") },
             modifier = Modifier.fillMaxWidth()
@@ -43,15 +63,5 @@ fun EmployerScreen(
             onClick = { authViewModel.logout() },
             modifier = Modifier.fillMaxWidth()
         ) { Text("Çıkış Yap") }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Profil bilgisi (humanMe)
-        Column(modifier = Modifier.padding(8.dp)) {
-            Text("MyID: ${humanMe?.name}")
-            Text("MyRole: ${humanMe?.role}")
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
     }
 }

@@ -9,6 +9,7 @@ import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.postgrest.result.PostgrestResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -240,6 +241,112 @@ class SupabaseRepository (
         } catch (e: Exception) {
             Log.e("SupabaseRepository", "İş ilanı oluşturulurken hata: ${e.message}")
             false
+        }
+    }
+
+    /**
+     * Tüm iş ilanlarını, başlangıç tarihine göre sıralı olarak getirir.
+     * @return İş ilanlarının listesi veya hata durumunda boş liste.
+     */
+    suspend fun getAllJobs(): List<Job> {
+        Log.d("RepoDebug", "getAllJobs: Fonksiyon BAŞLADI.")
+        if (supabase == null) {
+            Log.e("RepoDebug", "getAllJobs: Supabase client NULL.")
+            return emptyList()
+        }
+        try {
+            Log.d("RepoDebug", "getAllJobs: Supabase'e select sorgusu gönderiliyor...")
+            val response: PostgrestResult = supabase
+                .from("jobs")
+                .select {
+                    // Tarihe göre sırala (eskiden yeniye)
+                    order("date_start", Order.ASCENDING)
+                }
+            Log.d("RepoDebug", "getAllJobs: Supabase'den yanıt alındı. Data: ${response.data}")
+            val list = response.decodeList<Job>()
+            Log.i("RepoDebug", "getAllJobs: Başarıyla ${list.size} iş çekildi.")
+            return list
+        } catch (e: CancellationException) {
+            Log.w("RepoDebug", "getAllJobs İPTAL EDİLDİ.")
+            throw e // İptali yukarı fırlat
+        } catch (e: Exception) {
+            Log.e("RepoDebug", "getAllJobs CATCH'E DÜŞTÜ! ASIL HATA: ${e.message}", e)
+            return emptyList() // Hata durumunda boş liste dön
+        }
+    }
+
+    /**
+     * Belirli bir işverene ait iş ilanlarını, başlangıç tarihine göre sıralı olarak getirir.
+     * @param employerId İşverenin kullanıcı ID'si.
+     * @return İş ilanlarının listesi veya hata durumunda boş liste.
+     */
+    suspend fun getJobsByEmployerId(employerId: String): List<Job> {
+        Log.d("RepoDebug", "getJobsByEmployerId: Fonksiyon BAŞLADI (ID: $employerId).")
+        if (supabase == null) {
+            Log.e("RepoDebug", "getJobsByEmployerId: Supabase client NULL.")
+            return emptyList()
+        }
+        try {
+            Log.d("RepoDebug", "getJobsByEmployerId: Supabase'e select sorgusu gönderiliyor...")
+            val response: PostgrestResult = supabase
+                .from("jobs")
+                .select {
+                    // Sadece belirtilen işverene ait olanları filtrele
+                    filter {
+                        eq("employer_id", employerId)
+                    }
+                    // Tarihe göre sırala
+                    order("date_start", Order.ASCENDING)
+                }
+            Log.d("RepoDebug", "getJobsByEmployerId: Supabase'den yanıt alındı. Data: ${response.data}")
+            val list = response.decodeList<Job>()
+            Log.i("RepoDebug", "getJobsByEmployerId: Başarıyla ${list.size} iş çekildi.")
+            return list
+        } catch (e: CancellationException) {
+            Log.w("RepoDebug", "getJobsByEmployerId İPTAL EDİLDİ.")
+            throw e
+        } catch (e: Exception) {
+            Log.e("RepoDebug", "getJobsByEmployerId CATCH'E DÜŞTÜ! ASIL HATA: ${e.message}", e)
+            return emptyList()
+        }
+    }
+
+    /**
+     * Belirli bir tarih aralığındaki TÜM iş ilanlarını, başlangıç tarihine göre sıralı olarak getirir.
+     * Supabase 'date' tipi 'yyyy-MM-dd' formatını bekler.
+     * @param startDate Başlangıç tarihi (örn: "2025-10-20").
+     * @param endDate Bitiş tarihi (örn: "2025-10-27").
+     * @return İş ilanlarının listesi veya hata durumunda boş liste.
+     */
+    suspend fun getJobsByDateRange(startDate: String, endDate: String): List<Job> {
+        Log.d("RepoDebug", "getJobsByDateRange: Fonksiyon BAŞLADI ($startDate - $endDate).")
+        if (supabase == null) {
+            Log.e("RepoDebug", "getJobsByDateRange: Supabase client NULL.")
+            return emptyList()
+        }
+        try {
+            Log.d("RepoDebug", "getJobsByDateRange: Supabase'e select sorgusu gönderiliyor...")
+            val response: PostgrestResult = supabase
+                .from("jobs")
+                .select {
+                    // Tarih aralığı filtresi: date_start >= startDate AND date_start <= endDate
+                    filter {
+                        gte("date_start", startDate) // >= Başlangıç tarihi
+                        lte("date_start", endDate)   // <= Bitiş tarihi
+                    }
+                    // Tarihe göre sırala
+                    order("date_start", Order.ASCENDING)
+                }
+            Log.d("RepoDebug", "getJobsByDateRange: Supabase'den yanıt alındı. Data: ${response.data}")
+            val list = response.decodeList<Job>()
+            Log.i("RepoDebug", "getJobsByDateRange: Başarıyla ${list.size} iş çekildi.")
+            return list
+        } catch (e: CancellationException) {
+            Log.w("RepoDebug", "getJobsByDateRange İPTAL EDİLDİ.")
+            throw e
+        } catch (e: Exception) {
+            Log.e("RepoDebug", "getJobsByDateRange CATCH'E DÜŞTÜ! ASIL HATA: ${e.message}", e)
+            return emptyList()
         }
     }
 

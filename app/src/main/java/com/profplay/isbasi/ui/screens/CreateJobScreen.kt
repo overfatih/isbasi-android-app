@@ -78,6 +78,7 @@ fun CreateJobScreen(
                 }
                 // Başarıdan sonra formu temizledik (VM'de), şimdi ekrandan geri çıkalım
                 navController.popBackStack()
+                viewModel.resetStateToIdle()
             }
             is CreateJobUiState.Error -> {
                 scope.launch {

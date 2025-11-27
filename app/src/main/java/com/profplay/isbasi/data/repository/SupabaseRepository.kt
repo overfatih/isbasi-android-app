@@ -1,7 +1,6 @@
 package com.profplay.isbasi.data.repository
 
 import android.util.Log
-import com.profplay.isbasi.IsbasiApp.Companion.supabase
 import com.profplay.isbasi.data.model.Job
 import com.profplay.isbasi.data.model.User
 import io.github.jan.supabase.SupabaseClient
@@ -11,10 +10,10 @@ import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.postgrest.result.PostgrestResult
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
 import kotlin.coroutines.cancellation.CancellationException
+import com.profplay.isbasi.data.model.Application
+import io.github.jan.supabase.postgrest.query.Columns
 
 
 class SupabaseRepository (
@@ -347,6 +346,94 @@ class SupabaseRepository (
         } catch (e: Exception) {
             Log.e("RepoDebug", "getJobsByDateRange CATCH'E DÜŞTÜ! ASIL HATA: ${e.message}", e)
             return emptyList()
+        }
+    }
+
+    /**
+     * İşçinin bir iş ilanına başvurmasını sağlar.
+     * @param jobId Başvurulan işin ID'si
+     * @return Başvuru başarılıysa true, değilse false.
+     */
+    suspend fun applyForJob(jobId: String): Boolean {
+        val currentUserId = supabase.auth.currentUserOrNull()?.id
+        if (currentUserId == null) {
+            Log.e("RepoDebug", "applyForJob: Kullanıcı giriş yapmamış.")
+            return false
+        }
+
+        return try {
+            Log.d("RepoDebug", "applyForJob: Başvuru gönderiliyor... JobID: $jobId, WorkerID: $currentUserId")
+
+            // 'applications' tablosuna ekleme yap
+            // id ve created_at otomatik oluşur.
+            // status varsayılan olarak 'pending' (beklemede) olmalı (Veritabanında default value varsa).
+            // Yoksa buraya "status" to "pending" ekleyebilirsin.
+            supabase.from("applications").insert(
+                mapOf(
+                    "job_id" to jobId,
+                    "worker_id" to currentUserId,
+                    "status" to "pending" // Başlangıç durumu
+                )
+            )
+
+            Log.i("RepoDebug", "applyForJob: Başvuru BAŞARILI.")
+            true
+        } catch (e: Exception) {
+            // Eğer işçi aynı işe 2. kez başvurursa Supabase hata verir (Unique key varsa),
+            // veya RLS hatası olabilir.
+            Log.e("RepoDebug", "applyForJob HATA: ${e.message}", e)
+            false
+        }
+    }
+
+    /**
+     * Belirli bir işçinin TÜM başvurularını getirir.
+     * @param workerId İşçinin ID'si.
+     * @return Başvuruların listesi.
+     */
+    suspend fun getWorkerApplications(workerId: String): List<Application> {
+        return try {
+            val response: PostgrestResult = supabase
+                .from("applications")
+                .select {
+                    filter { eq("worker_id", workerId) }
+                }
+            return response.decodeList<Application>()
+        } catch (e: Exception) {
+            Log.e("RepoDebug", "getWorkerApplications HATA: ${e.message}", e)
+            return emptyList()
+        }
+    }
+
+    /**
+     * İşçinin belirli bir işe yaptığı başvuruyu iptal eder (applications tablosundan siler).
+     * @param jobId Başvurusu iptal edilecek işin ID'si.
+     * @return Başarılıysa true, değilse false.
+     */
+    suspend fun cancelApplication(jobId: String): Boolean {
+        val currentUserId = supabase.auth.currentUserOrNull()?.id
+        if (currentUserId == null) {
+            Log.e("RepoDebug", "cancelApplication: Kullanıcı oturumu bulunamadı.")
+            return false
+        }
+
+        return try {
+            Log.d("RepoDebug", "cancelApplication: Başvuru siliniyor. JobID: $jobId, WorkerID: $currentUserId")
+
+            // applications tablosundan hem jobId hem de workerId'ye uyan satırı sil
+            supabase.from("applications")
+                .delete {
+                    filter {
+                        eq("job_id", jobId)
+                        eq("worker_id", currentUserId)
+                    }
+                }
+
+            Log.i("RepoDebug", "cancelApplication: Başvuru BAŞARIYLA iptal edildi.")
+            true
+        } catch (e: Exception) {
+            Log.e("RepoDebug", "cancelApplication HATA: ${e.message}", e)
+            false
         }
     }
 

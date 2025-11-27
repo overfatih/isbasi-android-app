@@ -15,9 +15,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.profplay.isbasi.data.model.Job // Job modelini import et
+import com.profplay.isbasi.data.model.JobWithStatus
 import com.profplay.isbasi.viewmodel.JobListUiState
 import com.profplay.isbasi.viewmodel.JobListViewModel
 
@@ -93,8 +96,17 @@ fun JobListScreen(
                             contentPadding = PaddingValues(16.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            items(state.jobs) { job ->
-                                JobItem(job = job)
+                            items(state.jobs) { jobWithStatus ->
+                                JobItem(
+                                    jobWithStatus = jobWithStatus, // <-- Bu ismin JobItem tanımındaki isimle eşleştiğinden emin ol!
+                                    showApplyButton = loadMode == JobListLoadMode.AllJobs,
+                                    onApplyClick = { jobId ->
+                                        viewModel.applyToJob(jobId)
+                                    },
+                                    onCancelClick = { jobId ->
+                                        viewModel.cancelApplication(jobId)
+                                    }
+                                )
                             }
                         }
                     }
@@ -112,14 +124,29 @@ fun JobListScreen(
 
 // Liste elemanını gösterecek basit bir Composable
 @Composable
-fun JobItem(job: Job) {
+fun JobItem(
+    jobWithStatus: JobWithStatus, // JobWithStatus objesi ile başla
+    showApplyButton: Boolean,
+    onApplyClick: (String) -> Unit,
+    onCancelClick: (String) -> Unit
+) {
+    val job = jobWithStatus.job
+    val status = jobWithStatus.applicationStatus
+
+    // Duruma göre rengi belirle
+    val cardColor = when (status) {
+        "pending" -> Color(0xFFFFCC00) // Sarı/Turuncu
+        "approved" -> Color(0xFF4CAF50) // Yeşil
+        else -> MaterialTheme.colorScheme.surfaceVariant // Varsayılan renk
+    }
     Card(
         modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = cardColor),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(job.title, style = MaterialTheme.typography.titleMedium)
             Text("Konum: ${job.location}", style = MaterialTheme.typography.bodyMedium)
@@ -128,6 +155,30 @@ fun JobItem(job: Job) {
                 Text("Min. Puan: $it", style = MaterialTheme.typography.bodySmall)
             }
             // İleride buraya tıklama özelliği ekleyip detay sayfasına gidebiliriz
+            if (showApplyButton) {
+                when (status) {
+                    "pending" -> {
+                        Button(
+                            // İptal Butonuna tıklandığında Job'ın ID'sini geri gönder
+                            onClick = { onCancelClick(job.id!!) },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
+                        ) {
+                            Text("İptal Et", color = Color.White)
+                        }
+                    }
+                    "approved" -> {
+                        Text("ONAYLANDI", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                    else -> {
+                        // Talip Ol Butonuna tıklandığında Job'ın ID'sini geri gönder
+                        Button(
+                            onClick = { onApplyClick(job.id!!) }
+                        ) {
+                            Text("Talip Ol")
+                        }
+                    }
+                }
+            }
         }
     }
 }

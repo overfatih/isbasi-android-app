@@ -3,8 +3,10 @@ package com.profplay.isbasi.viewmodel
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.profplay.isbasi.data.model.JobWithStatus
 import com.profplay.isbasi.data.repository.SupabaseRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -22,25 +24,6 @@ class JobListViewModel(
     val uiState: StateFlow<JobListUiState> = _uiState
 
     // --- Veri Yükleme Fonksiyonları ---
-
-    /** İşçi için: Tüm iş ilanlarını yükler. */
-    fun loadAllJobs() {
-        Log.d("JobListViewModel", "loadAllJobs çağrıldı.")
-        viewModelScope.launch {
-            _uiState.value = JobListUiState.Loading
-            try {
-                val jobs = withContext(Dispatchers.IO) {
-                    repository.getAllJobs()
-                }
-                _uiState.value = JobListUiState.Success(jobs)
-                Log.i("JobListViewModel", "loadAllJobs: Başarıyla ${jobs.size} iş yüklendi.")
-            } catch (e: Exception) {
-                Log.e("JobListViewModel", "loadAllJobs HATA: ${e.message}", e)
-                _uiState.value = JobListUiState.Error("İş listesi yüklenemedi: ${e.message}")
-            }
-        }
-    }
-
     /** İşveren için: Sadece kendi iş ilanlarını yükler. */
     fun loadJobsForEmployer(employerId: String) {
         Log.d("JobListViewModel", "loadJobsForEmployer çağrıldı (ID: $employerId).")
@@ -50,7 +33,10 @@ class JobListViewModel(
                 val jobs = withContext(Dispatchers.IO) {
                     repository.getJobsByEmployerId(employerId)
                 }
-                _uiState.value = JobListUiState.Success(jobs)
+                val jobsWithStatus = jobs.map { job ->
+                    JobWithStatus(job = job, applicationStatus = null)
+                }
+                _uiState.value = JobListUiState.Success(jobsWithStatus)
                 Log.i("JobListViewModel", "loadJobsForEmployer: Başarıyla ${jobs.size} iş yüklendi.")
             } catch (e: Exception) {
                 Log.e("JobListViewModel", "loadJobsForEmployer HATA: ${e.message}", e)
@@ -72,7 +58,10 @@ class JobListViewModel(
                 val jobs = withContext(Dispatchers.IO) {
                     repository.getJobsByDateRange(startDateStr, endDateStr)
                 }
-                _uiState.value = JobListUiState.Success(jobs)
+                val jobsWithStatus = jobs.map { job ->
+                    JobWithStatus(job = job, applicationStatus = null)
+                }
+                _uiState.value = JobListUiState.Success(jobsWithStatus)
                 Log.i("JobListViewModel", "loadJobsByDateRange: Başarıyla ${jobs.size} iş yüklendi.")
             } catch (e: Exception) {
                 Log.e("JobListViewModel", "loadJobsByDateRange HATA: ${e.message}", e)
@@ -84,5 +73,89 @@ class JobListViewModel(
     // Hata gösterildikten sonra state'i Idle'a çekmek için (opsiyonel)
     fun resetStateToIdle() {
         _uiState.value = JobListUiState.Idle
+    }
+
+    fun applyToJob(jobId: String) {
+        viewModelScope.launch {
+            // Kullanıcıya işlemin başladığını hissettirmek için Loading yapabilirsin
+            // Ama tüm listeyi loading'e sokmak yerine bir "Snackbar" mesajı daha iyi olur.
+            // Şimdilik basitçe repository'yi çağıralım, sonucu loglayalım.
+            // İleride buraya "Başvuru yapılıyor..." gibi bir UI state ekleriz.
+
+            val success = withContext(Dispatchers.IO) {
+                repository.applyForJob(jobId)
+            }
+
+            if (success) {
+                // Başarılı ise kullanıcıya bildirmemiz lazım.
+                // Bunun için UI State'e tek seferlik bir "Mesaj" alanı ekleyebiliriz
+                // veya şimdilik Success state'ini güncelleyebiliriz ama bu listeyi yeniden yükler.
+                Log.i("JobListViewModel", "Başvuru başarıyla alındı: $jobId")
+                // İdeal dünyada: _oneTimeEvent.send("Başvurunuz alındı!")
+            } else {
+                Log.e("JobListViewModel", "Başvuru başarısız oldu: $jobId")
+                _uiState.value = JobListUiState.Error("Başvuru yapılamadı. Daha önce başvurmuş olabilirsiniz.")
+            }
+        }
+    }
+    fun loadAllJobs() {
+        Log.d("JobListViewModel", "loadAllJobs çağrıldı.")
+        viewModelScope.launch {
+            _uiState.value = JobListUiState.Loading
+            try {
+                val currentUserId = withContext(Dispatchers.IO) { repository.currentUserId() } ?: run {
+                    _uiState.value = JobListUiState.Error("Kullanıcı oturumu bulunamadı.")
+                    return@launch
+                }
+
+                val (allJobs, applications) = withContext(Dispatchers.IO) {
+                    // Eş zamanlı olarak 2 ağ isteği yap (daha hızlı)
+                    val allJobsDeferred = async { repository.getAllJobs() }
+                    val applicationsDeferred = async { repository.getWorkerApplications(currentUserId) }
+
+                    allJobsDeferred.await() to applicationsDeferred.await()
+                }
+
+                // Başvuruları hızlı arama için Map'e çevir: Map<jobId, status>
+                val applicationMap = applications.associate { it.jobId to it.status }
+
+                // İşleri statüleriyle birleştir
+                val jobsWithStatus = allJobs.map { job ->
+                    JobWithStatus(
+                        job = job,
+                        applicationStatus = applicationMap[job.id] // Eğer Map'te yoksa null döner
+                    )
+                }
+
+                _uiState.value = JobListUiState.Success(jobsWithStatus) // List<JobWithStatus> gönder
+                Log.i("JobListViewModel", "loadAllJobs: ${jobsWithStatus.size} iş yüklendi.")
+            } catch (e: Exception) {
+                Log.e("JobListViewModel", "loadAllJobs HATA: ${e.message}", e)
+                _uiState.value = JobListUiState.Error("İş listesi yüklenemedi: ${e.message}")
+            }
+        }
+    }
+
+    /** İptal butonu için: Başvuruyu iptal eder ve listeyi yeniden yükler. */
+    fun cancelApplication(jobId: String) {
+        Log.d("JobListViewModel", "cancelApplication çağrıldı (JobID: $jobId).")
+        viewModelScope.launch {
+            // Şimdilik listeyi Loading'e sokmuyoruz, sadece butonda feedback vereceğiz
+
+            val success = withContext(Dispatchers.IO) {
+                repository.cancelApplication(jobId)
+            }
+
+            if (success) {
+                Log.i("JobListViewModel", "Başvuru başarıyla iptal edildi: $jobId. Liste güncelleniyor...")
+                // Başarılıysa, listeyi yenile ki güncel durum (butonun kaybolması/değişmesi) görülsün
+                loadAllJobs()
+            } else {
+                Log.e("JobListViewModel", "Başvuru iptali başarısız oldu: $jobId")
+                _uiState.value = JobListUiState.Error("Başvuru iptal edilemedi.")
+                // Hata durumunda da listeyi yeniden yükleyebiliriz
+                loadAllJobs()
+            }
+        }
     }
 }

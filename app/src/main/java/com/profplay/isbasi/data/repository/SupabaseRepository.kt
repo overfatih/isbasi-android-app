@@ -211,6 +211,7 @@ class SupabaseRepository (
         description: String,
         location: String,
         dateStart: String,
+        dateEnd: String,
         minRating: Float?
     ): Boolean {
         return try {
@@ -228,6 +229,7 @@ class SupabaseRepository (
                 description = description,
                 location = location,
                 dateStart = dateStart,
+                dateEnd = dateEnd,
                 minRating = minRating
                 // id ve createdAt otomatik atanacak
             )
@@ -378,7 +380,7 @@ class SupabaseRepository (
      * @return Başvuruların listesi.
      */
     suspend fun getWorkerApplications(workerId: String): List<Application> {
-        return try {
+        try {
             val response: PostgrestResult = supabase
                 .from("applications")
                 .select {

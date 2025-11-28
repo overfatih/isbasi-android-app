@@ -29,6 +29,8 @@ class CreateJobViewModel(
     // Tarihi "yyyy-MM-dd" formatında tutacağız (Supabase'in 'date' formatı)
     private val _dateStart = mutableStateOf("")
     val dateStart: State<String> = _dateStart
+    private val _dateEnd = mutableStateOf("")
+    val dateEnd: State<String> = _dateEnd
 
     // Puanı String olarak alıp Float'a çevireceğiz, böylece "boş" olabilir
     private val _minRating = mutableStateOf("")
@@ -49,32 +51,49 @@ class CreateJobViewModel(
     fun onDateStartChange(selectedDateMillis: Long) {
         val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         _dateStart.value = dateFormat.format(Date(selectedDateMillis))
+        // Kullanıcı kolaylığı: Başlangıç seçilince, bitişi de otomatik olarak o gün yap (varsayılan 1 gün)
+        // Eğer bitiş tarihi boşsa veya başlangıçtan önceyse güncelle.
+        if (_dateEnd.value.isBlank() || selectedDateMillis > convertDateToMillis(_dateEnd.value)) {
+            _dateEnd.value = _dateStart.value
+        }
+    }
+    fun onDateEndChange(selectedDateMillis: Long) {
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        _dateEnd.value = dateFormat.format(Date(selectedDateMillis))
+    }
+
+    // String tarihi Long'a çeviren yardımcı (karşılaştırma için)
+    private fun convertDateToMillis(dateStr: String): Long {
+        return try {
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            sdf.parse(dateStr)?.time ?: 0L
+        } catch (e: Exception) { 0L }
     }
 
     // --- Ana İşlem Fonksiyonu ---
 
     fun publishJob() {
         viewModelScope.launch {
-            // Basit bir zorunlu alan kontrolü
-            if (title.value.isBlank() || description.value.isBlank() || location.value.isBlank() || dateStart.value.isBlank()) {
+            // dateEnd kontrolünü de ekle
+            if (title.value.isBlank() || location.value.isBlank() || dateStart.value.isBlank() || dateEnd.value.isBlank()) {
                 _uiState.value = CreateJobUiState.Error("Lütfen tüm zorunlu alanları doldurun.")
                 return@launch
             }
-
+            // Tarih mantık kontrolü: Bitiş, başlangıçtan önce olamaz
+            if (convertDateToMillis(_dateEnd.value) < convertDateToMillis(_dateStart.value)) {
+                _uiState.value = CreateJobUiState.Error("Bitiş tarihi, başlangıç tarihinden önce olamaz.")
+                return@launch
+            }
             _uiState.value = CreateJobUiState.Loading
-
-            // Min Puan'ı Float'a çevirmeyi dene, olmazsa null olsun
             val ratingFloat = _minRating.value.toFloatOrNull()
-
-            // Repository'deki yeni createJob fonksiyonunu çağır
             val success = repository.createJob(
                 title = _title.value,
                 description = _description.value,
                 location = _location.value,
                 dateStart = _dateStart.value,
+                dateEnd = _dateEnd.value, // <-- GÖNDERİLİYOR
                 minRating = ratingFloat
             )
-
             if (success) {
                 _uiState.value = CreateJobUiState.Success
                 clearForm() // Başarılıysa formu temizle
@@ -90,6 +109,7 @@ class CreateJobViewModel(
         _description.value = ""
         _location.value = ""
         _dateStart.value = ""
+        _dateEnd.value = ""
         _minRating.value = ""
     }
 

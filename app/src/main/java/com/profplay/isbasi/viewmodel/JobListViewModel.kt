@@ -3,6 +3,7 @@ package com.profplay.isbasi.viewmodel
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.profplay.isbasi.data.model.Job
 import com.profplay.isbasi.data.model.JobWithStatus
 import com.profplay.isbasi.data.repository.SupabaseRepository
 import kotlinx.coroutines.Dispatchers
@@ -12,9 +13,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat // Tarih formatlama için
+import java.time.format.DateTimeFormatter
 import java.util.Date // Tarih işlemleri için
 import java.util.Locale // Bölge ayarları için
-
+import java.time.LocalDate
 class JobListViewModel(
     private val repository: SupabaseRepository
 ) : ViewModel() {
@@ -102,36 +104,111 @@ class JobListViewModel(
         viewModelScope.launch {
             _uiState.value = JobListUiState.Loading
             try {
-                val currentUserId = withContext(Dispatchers.IO) { repository.currentUserId() } ?: run {
+                // 1. Kullanıcı ID'sini al (Hata vermemesi için güvenli çağrı)
+                val currentUserId = repository.currentUserId()
+                if (currentUserId == null) {
                     _uiState.value = JobListUiState.Error("Kullanıcı oturumu bulunamadı.")
                     return@launch
                 }
 
+                // 2. Verileri Paralel Çek (Async/Await)
+                // Bu blok bize bir Pair(Çift) döndürecek: (List<Job>, List<Application>)
                 val (allJobs, applications) = withContext(Dispatchers.IO) {
-                    // Eş zamanlı olarak 2 ağ isteği yap (daha hızlı)
                     val allJobsDeferred = async { repository.getAllJobs() }
                     val applicationsDeferred = async { repository.getWorkerApplications(currentUserId) }
 
+                    // İki işlemin de bitmesini bekle ve sonuçları çift olarak döndür
                     allJobsDeferred.await() to applicationsDeferred.await()
                 }
 
-                // Başvuruları hızlı arama için Map'e çevir: Map<jobId, status>
+                // 3. Başvuruları Map'e çevir (Hızlı erişim için)
                 val applicationMap = applications.associate { it.jobId to it.status }
 
-                // İşleri statüleriyle birleştir
+                // 4. Onaylanmış işlerin listesini çıkar (Çakışma kontrolü için)
+                // Status'u "approved" olan başvuruların job_id'lerini alıyoruz
+                val approvedJobIds = applications
+                    .filter { it.status == "approved" }
+                    .map { it.jobId }
+                    .toSet()
+
+                // Onaylanmış işlerin tam detaylarını bul
+                val approvedJobs = allJobs.filter { it.id in approvedJobIds }
+
+                // 5. İş Listesini Oluştur ve Çakışmaları Kontrol Et
                 val jobsWithStatus = allJobs.map { job ->
+                    val status = applicationMap[job.id]
+
+                    // Çakışma var mı?
+                    var isConflict = false
+
+                    // Eğer bu işe zaten onay almadıysak ve beklemede değilsek çakışma kontrolü yap
+                    // (Onaylı veya beklemede olan işin kendisiyle çakışması önemli değil)
+                    if (status != "approved") {
+                        isConflict = approvedJobs.any { approvedJob ->
+                            // approvedJob kendisi değilse kontrol et
+                            if (job.id != approvedJob.id) {
+                                checkOverlap(job, approvedJob)
+                            } else false
+                        }
+                    }
+
                     JobWithStatus(
                         job = job,
-                        applicationStatus = applicationMap[job.id] // Eğer Map'te yoksa null döner
+                        applicationStatus = status,
+                        hasConflict = isConflict
                     )
                 }
 
-                _uiState.value = JobListUiState.Success(jobsWithStatus) // List<JobWithStatus> gönder
+                // 6. UI State'i Güncelle
+                _uiState.value = JobListUiState.Success(jobsWithStatus)
                 Log.i("JobListViewModel", "loadAllJobs: ${jobsWithStatus.size} iş yüklendi.")
+
             } catch (e: Exception) {
                 Log.e("JobListViewModel", "loadAllJobs HATA: ${e.message}", e)
                 _uiState.value = JobListUiState.Error("İş listesi yüklenemedi: ${e.message}")
             }
+        }
+    }
+
+    // Tarih çakışmasını kontrol eden yardımcı fonksiyon
+    private fun checkOverlap(job1: Job, job2: Job): Boolean {
+        return try {
+            val formatter = DateTimeFormatter.ISO_DATE
+
+            // job1 için tarihleri hazırla (Mevcut Listedeki İş)
+            val start1 = LocalDate.parse(job1.dateStart, formatter)
+            // Eğer dateEnd boşsa veya null ise, bitiş tarihini başlangıç tarihi kabul et (1 günlük iş)
+            val end1 = if (!job1.dateEnd.isNullOrBlank()) {
+                LocalDate.parse(job1.dateEnd, formatter)
+            } else {
+                start1
+            }
+
+            // job2 için tarihleri hazırla (Onaylanmış İş)
+            val start2 = LocalDate.parse(job2.dateStart, formatter)
+            val end2 = if (!job2.dateEnd.isNullOrBlank()) {
+                LocalDate.parse(job2.dateEnd, formatter)
+            } else {
+                start2
+            }
+
+            // --- ÇAKIŞMA MANTIĞI ---
+            // (Start1 <= End2) VE (End1 >= Start2)
+            // Kotlin LocalDate ile:
+            // !start1.isAfter(end2) && !end1.isBefore(start2)
+
+            val isOverlapping = !start1.isAfter(end2) && !end1.isBefore(start2)
+
+            // Hata ayıklama için log (Logcat'te 'OverlapCheck' araması yap)
+            if (isOverlapping) {
+                Log.w("OverlapCheck", "ÇAKIŞMA BULUNDU: ${job1.title} ($start1-$end1) <-> ${job2.title} ($start2-$end2)")
+            }
+
+            return isOverlapping
+
+        } catch (e: Exception) {
+            Log.e("OverlapCheck", "Tarih hatası: ${e.message} (Job1: ${job1.dateStart}-${job1.dateEnd}, Job2: ${job2.dateStart}-${job2.dateEnd})")
+            false
         }
     }
 

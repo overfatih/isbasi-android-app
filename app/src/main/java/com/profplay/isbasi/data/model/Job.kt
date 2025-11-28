@@ -13,6 +13,8 @@ data class Job(
     val location: String,
     @SerialName("date_start")
     val dateStart: String,
+    @SerialName("date_end")
+    val dateEnd: String? = null,
     @SerialName("min_rating")
     val minRating: Float? = null,
     @SerialName("created_at")

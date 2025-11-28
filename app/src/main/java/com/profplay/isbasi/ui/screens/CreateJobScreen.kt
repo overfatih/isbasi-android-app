@@ -59,6 +59,7 @@ fun CreateJobScreen(
     val description by viewModel.description
     val location by viewModel.location
     val dateStart by viewModel.dateStart
+    val dateEnd by viewModel.dateEnd
     val minRating by viewModel.minRating
     val uiState by viewModel.uiState.collectAsState()
 
@@ -68,6 +69,7 @@ fun CreateJobScreen(
     // Date Picker (Tarih Seçici) için state'ler
     val datePickerState = rememberDatePickerState()
     var showDatePicker by remember { mutableStateOf(false) }
+    var pickingField by remember { mutableStateOf<String?>(null) }
 
     // UI state değişikliklerini dinle (Snackbar göstermek için)
     LaunchedEffect(key1 = uiState) {
@@ -98,13 +100,16 @@ fun CreateJobScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        showDatePicker = false
-                        // Seçilen tarihi al (milisaniye olarak)
                         val selectedDateMillis = datePickerState.selectedDateMillis
                         if (selectedDateMillis != null) {
-                            // ViewModel'e tarihi Long olarak gönder (VM bunu formatlayacak)
-                            viewModel.onDateStartChange(selectedDateMillis)
+                            // Hangi alan için açıldıysa ona göre VM'i çağır
+                            if (pickingField == "start") {
+                                viewModel.onDateStartChange(selectedDateMillis)
+                            } else if (pickingField == "end") {
+                                viewModel.onDateEndChange(selectedDateMillis)
+                            }
                         }
+                        showDatePicker = false
                     }
                 ) {
                     Text("Tamam")
@@ -168,29 +173,44 @@ fun CreateJobScreen(
             )
 
             // Tarih Seçme Alanı
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { showDatePicker = true } // Tıklama olayı artık Box'ta
-            ) {
+            // --- BAŞLANGIÇ TARİHİ ---
+            Box(modifier = Modifier.fillMaxWidth().clickable {
+                pickingField = "start" // Başlangıç seçiliyor
+                showDatePicker = true
+            }) {
                 TextField(
                     value = dateStart,
                     onValueChange = {},
                     label = { Text("İş Başlama Tarihi") },
-                    enabled = false, // Tıklama almasın diye pasif yapıyoruz
-                    modifier = Modifier.fillMaxWidth(), // Tıklama modifiyesi burada değil
-                    trailingIcon = {
-                        Icon(Icons.Default.DateRange, contentDescription = "Tarih Seç")
-                    },
-                    // Pasif (disabled) olduğunda soluk gri DEĞİL, normal görünmesi için renkleri eziyoruz
+                    enabled = false, // Box tıklanabilir
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = { Icon(Icons.Default.DateRange, contentDescription = null) },
                     colors = TextFieldDefaults.colors(
                         disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                        disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                         disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        disabledIndicatorColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        // Eğer OutlinedTextField kullanıyorsanız, buraya 'disabledBorderColor' da eklemeniz gerekir.
-                        // Normal TextField için bu kadarı yeterlidir.
-                        disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest // Hafif bir arka plan
+                        disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                )
+            }
+
+            // --- BİTİŞ TARİHİ (YENİ) ---
+            Box(modifier = Modifier.fillMaxWidth().clickable {
+                pickingField = "end" // Bitiş seçiliyor
+                showDatePicker = true
+            }) {
+                TextField(
+                    value = dateEnd,
+                    onValueChange = {},
+                    label = { Text("İş Bitiş Tarihi") },
+                    enabled = false, // Box tıklanabilir
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = { Icon(Icons.Default.DateRange, contentDescription = null) },
+                    colors = TextFieldDefaults.colors( // Aynı renk ayarları
+                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                        disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 )
             }

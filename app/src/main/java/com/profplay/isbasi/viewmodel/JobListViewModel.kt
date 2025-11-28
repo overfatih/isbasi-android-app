@@ -77,21 +77,20 @@ class JobListViewModel(
 
     fun applyToJob(jobId: String) {
         viewModelScope.launch {
-            // Kullanıcıya işlemin başladığını hissettirmek için Loading yapabilirsin
-            // Ama tüm listeyi loading'e sokmak yerine bir "Snackbar" mesajı daha iyi olur.
-            // Şimdilik basitçe repository'yi çağıralım, sonucu loglayalım.
-            // İleride buraya "Başvuru yapılıyor..." gibi bir UI state ekleriz.
+            // ID'yi ViewModel'de güvenli bir şekilde al
+            val currentUserId = repository.currentUserId()
+            if (currentUserId == null) {
+                _uiState.value = JobListUiState.Error("Kullanıcı oturumu bulunamadı. Lütfen tekrar giriş yapın.")
+                return@launch // İşlemi burada sonlandır
+            }
 
             val success = withContext(Dispatchers.IO) {
-                repository.applyForJob(jobId)
+                repository.applyForJob(jobId, currentUserId) // <-- ID'yi gönder!
             }
 
             if (success) {
-                // Başarılı ise kullanıcıya bildirmemiz lazım.
-                // Bunun için UI State'e tek seferlik bir "Mesaj" alanı ekleyebiliriz
-                // veya şimdilik Success state'ini güncelleyebiliriz ama bu listeyi yeniden yükler.
                 Log.i("JobListViewModel", "Başvuru başarıyla alındı: $jobId")
-                // İdeal dünyada: _oneTimeEvent.send("Başvurunuz alındı!")
+                loadAllJobs()
             } else {
                 Log.e("JobListViewModel", "Başvuru başarısız oldu: $jobId")
                 _uiState.value = JobListUiState.Error("Başvuru yapılamadı. Daha önce başvurmuş olabilirsiniz.")
@@ -140,10 +139,13 @@ class JobListViewModel(
     fun cancelApplication(jobId: String) {
         Log.d("JobListViewModel", "cancelApplication çağrıldı (JobID: $jobId).")
         viewModelScope.launch {
-            // Şimdilik listeyi Loading'e sokmuyoruz, sadece butonda feedback vereceğiz
-
+            val currentUserId = repository.currentUserId()
+            if (currentUserId == null) {
+                _uiState.value = JobListUiState.Error("Kullanıcı oturumu bulunamadı. Lütfen tekrar giriş yapın.")
+                return@launch // İşlemi burada sonlandır
+            }
             val success = withContext(Dispatchers.IO) {
-                repository.cancelApplication(jobId)
+                repository.cancelApplication(jobId, currentUserId) // <-- ID'yi gönder!
             }
 
             if (success) {

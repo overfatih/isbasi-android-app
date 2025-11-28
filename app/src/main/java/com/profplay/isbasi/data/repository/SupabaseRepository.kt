@@ -130,9 +130,9 @@ class SupabaseRepository (
         supabase.auth.signOut()
     }
 
-    fun currentUserId(): String? =
-        supabase.auth.currentSessionOrNull()?.user?.id
-
+    fun currentUserId(): String? {
+        return supabase.auth.currentUserOrNull()?.id
+    }
     fun isLoggedIn(): Boolean {
         return supabase.auth.currentSessionOrNull() != null
     }
@@ -354,33 +354,19 @@ class SupabaseRepository (
      * @param jobId Başvurulan işin ID'si
      * @return Başvuru başarılıysa true, değilse false.
      */
-    suspend fun applyForJob(jobId: String): Boolean {
-        val currentUserId = supabase.auth.currentUserOrNull()?.id
-        if (currentUserId == null) {
-            Log.e("RepoDebug", "applyForJob: Kullanıcı giriş yapmamış.")
-            return false
-        }
-
+    suspend fun applyForJob(jobId: String, workerId: String): Boolean {
         return try {
-            Log.d("RepoDebug", "applyForJob: Başvuru gönderiliyor... JobID: $jobId, WorkerID: $currentUserId")
-
-            // 'applications' tablosuna ekleme yap
-            // id ve created_at otomatik oluşur.
-            // status varsayılan olarak 'pending' (beklemede) olmalı (Veritabanında default value varsa).
-            // Yoksa buraya "status" to "pending" ekleyebilirsin.
+            Log.d("RepoDebug", "applyForJob: Başvuru gönderiliyor... JobID: $jobId, WorkerID: $workerId")
             supabase.from("applications").insert(
                 mapOf(
                     "job_id" to jobId,
-                    "worker_id" to currentUserId,
-                    "status" to "pending" // Başlangıç durumu
+                    "worker_id" to workerId, // Parametreden gelen ID'yi kullan
+                    "status" to "pending"
                 )
             )
-
             Log.i("RepoDebug", "applyForJob: Başvuru BAŞARILI.")
             true
         } catch (e: Exception) {
-            // Eğer işçi aynı işe 2. kez başvurursa Supabase hata verir (Unique key varsa),
-            // veya RLS hatası olabilir.
             Log.e("RepoDebug", "applyForJob HATA: ${e.message}", e)
             false
         }
@@ -408,31 +394,88 @@ class SupabaseRepository (
     /**
      * İşçinin belirli bir işe yaptığı başvuruyu iptal eder (applications tablosundan siler).
      * @param jobId Başvurusu iptal edilecek işin ID'si.
+     * @param workerId Başvurusu iptal edilecek işçinin ID'si.
      * @return Başarılıysa true, değilse false.
      */
-    suspend fun cancelApplication(jobId: String): Boolean {
-        val currentUserId = supabase.auth.currentUserOrNull()?.id
-        if (currentUserId == null) {
-            Log.e("RepoDebug", "cancelApplication: Kullanıcı oturumu bulunamadı.")
-            return false
-        }
-
+    suspend fun cancelApplication(jobId: String, workerId: String): Boolean {
         return try {
-            Log.d("RepoDebug", "cancelApplication: Başvuru siliniyor. JobID: $jobId, WorkerID: $currentUserId")
-
-            // applications tablosundan hem jobId hem de workerId'ye uyan satırı sil
+            Log.d("RepoDebug", "cancelApplication: Başvuru siliniyor. JobID: $jobId, WorkerID: $workerId")
             supabase.from("applications")
                 .delete {
                     filter {
                         eq("job_id", jobId)
-                        eq("worker_id", currentUserId)
+                        eq("worker_id", workerId) // Parametreden gelen ID'yi kullan
                     }
                 }
-
             Log.i("RepoDebug", "cancelApplication: Başvuru BAŞARIYLA iptal edildi.")
             true
         } catch (e: Exception) {
             Log.e("RepoDebug", "cancelApplication HATA: ${e.message}", e)
+            false
+        }
+    }
+
+    /**
+     * Bir iş ilanına yapılmış TÜM başvuruları getirir.
+     * Bu fonksiyon sadece application tablosunu değil,
+     * başvuran işçinin profil bilgilerini de (join mantığıyla) getirmelidir.
+     * Şimdilik basitlik adına önce başvuruları, sonra profilleri çekeceğiz.
+     */
+    suspend fun getApplicationsForJob(jobId: String): List<Pair<Application, User>> {
+        Log.d("RepoDebug", "getApplicationsForJob: Başvurular çekiliyor... JobID: $jobId")
+        try {
+            // 1. Başvuruları çek
+            val appsResponse = supabase.from("applications").select {
+                filter { eq("job_id", jobId) }
+            }
+            val applications = appsResponse.decodeList<Application>()
+
+            if (applications.isEmpty()) return emptyList()
+
+            // 2. Başvuran işçilerin ID'lerini topla
+            val workerIds = applications.map { it.workerId }
+
+            // 3. Bu ID'lere sahip kullanıcı profillerini çek
+            val usersResponse = supabase.from("users").select {
+                filter { isIn("id", workerIds) }
+            }
+            val workers = usersResponse.decodeList<User>()
+            val workersMap = workers.associateBy { it.id }
+
+            // 4. Başvuru + İşçi Profili çifti oluştur
+            val result = applications.mapNotNull { app ->
+                val worker = workersMap[app.workerId]
+                if (worker != null) {
+                    Pair(app, worker)
+                } else null
+            }
+
+            Log.i("RepoDebug", "getApplicationsForJob: ${result.size} başvuru ve profil eşleşti.")
+            return result
+
+        } catch (e: Exception) {
+            Log.e("RepoDebug", "getApplicationsForJob HATA: ${e.message}", e)
+            return emptyList()
+        }
+    }
+
+    /**
+     * Başvuru durumunu günceller (approved/rejected).
+     */
+    suspend fun updateApplicationStatus(applicationId: String, newStatus: String): Boolean {
+        return try {
+            Log.d("RepoDebug", "updateApplicationStatus: Durum güncelleniyor -> $newStatus")
+
+            supabase.from("applications").update(
+                mapOf("status" to newStatus)
+            ) {
+                filter { eq("id", applicationId) }
+            }
+
+            Log.i("RepoDebug", "updateApplicationStatus: Başarılı.")
+            true
+        } catch (e: Exception) {
+            Log.e("RepoDebug", "updateApplicationStatus HATA: ${e.message}", e)
             false
         }
     }

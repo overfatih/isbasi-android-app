@@ -25,6 +25,7 @@ import com.profplay.isbasi.ui.screens.AuthScreen
 import com.profplay.isbasi.ui.screens.CreateJobScreen
 import com.profplay.isbasi.ui.screens.EmployeeScreen
 import com.profplay.isbasi.ui.screens.EmployerScreen
+import com.profplay.isbasi.ui.screens.JobApplicantsScreen
 import com.profplay.isbasi.ui.screens.JobListLoadMode
 import com.profplay.isbasi.ui.screens.JobListScreen
 import com.profplay.isbasi.ui.screens.ProfileScreen
@@ -58,6 +59,7 @@ fun LoggedInNavigation(authViewModel: AuthViewModel) {
                 val profileViewModel: ProfileViewModel = viewModel( factory = ProfileViewModelFactory(repository) )
                 val createJobViewModel: CreateJobViewModel = viewModel( factory = CreateJobViewModelFactory(repository) )
                 val jobListViewModel: JobListViewModel = viewModel( factory = JobListViewModelFactory(repository) )
+                val jobApplicantsViewModel: JobApplicantsViewModel = viewModel(factory = JobApplicantsViewModelFactory(repository))
 
                 // --- LaunchedEffect currentUserId'yi DİNLİYOR ---
                 // currentUserId null'dan farklı bir değere değiştiğinde ÇALIŞIR
@@ -97,8 +99,28 @@ fun LoggedInNavigation(authViewModel: AuthViewModel) {
                             navController = navController,
                             viewModel = jobListViewModel,
                             loadMode = loadMode,
-                            employerIdForFilter = employerIdArg
+                            employerIdForFilter = employerIdArg,
+                            onJobClick = { jobId ->
+                                navController.navigate("job_applicants/$jobId")
+                            }
                         )
+                    }
+                    composable(
+                        route = "job_applicants/{jobId}",
+                        arguments = listOf(
+                            navArgument("jobId") { type = NavType.StringType }
+                        )
+                    ) { backStackEntry ->
+                        // URL'den jobId'yi al
+                        val jobId = backStackEntry.arguments?.getString("jobId")
+
+                        if (jobId != null) {
+                            JobApplicantsScreen(
+                                navController = navController,
+                                viewModel = jobApplicantsViewModel,
+                                jobId = jobId
+                            )
+                        }
                     }
                 }
             }

@@ -1,5 +1,6 @@
 package com.profplay.isbasi.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,7 +35,8 @@ fun JobListScreen(
     // Başlangıçta hangi listeyi yükleyeceğimizi bilmemiz lazım.
     loadMode: JobListLoadMode,
     // Eğer işverene göre yüklüyorsak ID'yi de almalıyız
-    employerIdForFilter: String? = null // Sadece .MyJobs modunda kullanılır
+    employerIdForFilter: String? = null, // Sadece .MyJobs modunda kullanılır
+    onJobClick: (String) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -105,7 +107,8 @@ fun JobListScreen(
                                     },
                                     onCancelClick = { jobId ->
                                         viewModel.cancelApplication(jobId)
-                                    }
+                                    },
+                                    onJobClick = onJobClick
                                 )
                             }
                         }
@@ -128,7 +131,8 @@ fun JobItem(
     jobWithStatus: JobWithStatus, // JobWithStatus objesi ile başla
     showApplyButton: Boolean,
     onApplyClick: (String) -> Unit,
-    onCancelClick: (String) -> Unit
+    onCancelClick: (String) -> Unit,
+    onJobClick: (String) -> Unit
 ) {
     val job = jobWithStatus.job
     val status = jobWithStatus.applicationStatus
@@ -140,7 +144,11 @@ fun JobItem(
         else -> MaterialTheme.colorScheme.surfaceVariant // Varsayılan renk
     }
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth()
+            .then(if (!showApplyButton) Modifier.clickable {
+                // Tıklama olayını yukarı (JobListScreen'e) taşıman lazım
+                job.id?.let { onJobClick(it) }
+            } else Modifier),
         colors = CardDefaults.cardColors(containerColor = cardColor),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {

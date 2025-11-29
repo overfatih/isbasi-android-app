@@ -186,20 +186,16 @@ fun JobListScreen(
                             }
 
                             // --- ALT BUTON (GEÇİŞ) ---
-                            // Sadece "AllJobs" (İşçi) modundaysak bu mantığı işletelim.
-                            // İşveren modunda da isteyebilirsin, o zaman if'i kaldır.
-                            if (loadMode == JobListLoadMode.AllJobs) {
-                                Button(
-                                    onClick = { showArchive = !showArchive }, // Tersi ile değiştir
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = if (showArchive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
-                                    )
-                                ) {
-                                    Text(if (showArchive) "Güncel İlanlara Dön" else "Arşivlenmiş İlanları Gör")
-                                }
+                            Button(
+                                onClick = { showArchive = !showArchive }, // Tersi ile değiştir
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (showArchive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+                                )
+                            ) {
+                                Text(if (showArchive) "Güncel İlanlara Dön" else "Arşivlenmiş İlanları Gör")
                             }
                         }
                     }

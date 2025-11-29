@@ -577,5 +577,24 @@ class SupabaseRepository (
             null
         }
     }
+    suspend fun getJobById(jobId: String): Job? {
+        return try {
+            supabase.from("jobs").select { filter { eq("id", jobId) } }
+                .decodeSingle<Job>()
+        } catch (e: Exception) { null }
+    }
+    suspend fun getReviewsByJobAndReviewer(jobId: String, reviewerId: String): List<Review> {
+        return try {
+            val response = supabase.from("reviews").select {
+                filter {
+                    eq("job_id", jobId)
+                    eq("reviewer_id", reviewerId)
+                }
+            }
+            response.decodeList<Review>()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
 
 }

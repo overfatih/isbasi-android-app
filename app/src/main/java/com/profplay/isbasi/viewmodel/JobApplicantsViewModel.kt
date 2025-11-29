@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.profplay.isbasi.data.model.Application
+import com.profplay.isbasi.data.model.ReviewWithReviewer
 import com.profplay.isbasi.data.model.User
 import com.profplay.isbasi.data.repository.SupabaseRepository
 import kotlinx.coroutines.Dispatchers
@@ -21,7 +22,8 @@ sealed interface ApplicantsUiState {
 }
 
 class JobApplicantsViewModel(private val repository: SupabaseRepository) : ViewModel() {
-
+    private val _reviewsState = MutableStateFlow<Map<String, List<ReviewWithReviewer>>>(emptyMap())
+    val reviewsState: StateFlow<Map<String, List<ReviewWithReviewer>>> = _reviewsState
     private val _uiState = MutableStateFlow<ApplicantsUiState>(ApplicantsUiState.Idle)
     val uiState: StateFlow<ApplicantsUiState> = _uiState
 
@@ -46,6 +48,19 @@ class JobApplicantsViewModel(private val repository: SupabaseRepository) : ViewM
             } else {
                 // Hata mesajı eklenebilir
             }
+        }
+    }
+
+    fun loadReviews(userId: String) {
+        viewModelScope.launch {
+            // Eğer daha önce çekildiyse tekrar çekme (Performans)
+            if (_reviewsState.value.containsKey(userId)) return@launch
+
+            val reviews = withContext(Dispatchers.IO) {
+                repository.getReviewsForUser(userId)
+            }
+            // Mevcut haritaya ekle
+            _reviewsState.value = _reviewsState.value + (userId to reviews)
         }
     }
 }

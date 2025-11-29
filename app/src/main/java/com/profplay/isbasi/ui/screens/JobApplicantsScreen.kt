@@ -6,15 +6,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.profplay.isbasi.data.model.Application
+import com.profplay.isbasi.data.model.ReviewWithReviewer
 import com.profplay.isbasi.data.model.User
 import com.profplay.isbasi.viewmodel.ApplicantsUiState
 import com.profplay.isbasi.viewmodel.JobApplicantsViewModel
@@ -27,7 +30,7 @@ fun JobApplicantsScreen(
     jobId: String
 ) {
     val uiState by viewModel.uiState.collectAsState()
-
+    val reviewsMap by viewModel.reviewsState.collectAsState()
     // Ekran açılınca verileri yükle
     LaunchedEffect(jobId) {
         viewModel.loadApplicants(jobId)
@@ -61,7 +64,14 @@ fun JobApplicantsScreen(
                                     onUpdateStatus = { status ->
                                         // application.id null olamaz, veritabanından geliyor
                                         viewModel.updateStatus(application.id!!, status, jobId)
-                                    }
+                                    },
+                                            onRequestReviews = { workerId ->
+                                        viewModel.loadReviews(workerId)
+                                    },
+
+                                    // B. Bu işçinin yorumlarını nereden bulayım?
+                                    // Cevap: reviewsMap içinden bu işçinin ID'sine karşılık gelen listeyi al.
+                                    reviews = reviewsMap[worker.id]
                                 )
                             }
                         }
@@ -77,9 +87,12 @@ fun JobApplicantsScreen(
 fun ApplicantItem(
     application: Application,
     worker: User,
-    onUpdateStatus: (String) -> Unit
+    onUpdateStatus: (String) -> Unit,
+    onRequestReviews: (String) -> Unit,
+    reviews: List<ReviewWithReviewer>?
 ) {
     var showBioDialog by remember { mutableStateOf(false) }
+    var showReviewsDialog by remember { mutableStateOf(false)}
 
     Card(
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -92,11 +105,15 @@ fun ApplicantItem(
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f)
                 )
-                // Puanı göster
-                Text(
-                    text = "⭐ ${worker.rating ?: "-"}",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                TextButton(onClick = {
+                    onRequestReviews(worker.id) // ViewModel'e "Veriyi getir" de
+                    showReviewsDialog = true    // Pencereyi aç
+                }) {
+                    Text(text = "⭐ ${worker.rating ?: "-"}")
+                    Spacer(modifier = Modifier.width(4.dp))
+                    // Comment yerine Email kullanıyoruz (Standart pakette var)
+                    Icon(Icons.Default.Email, contentDescription = "Yorumlar", modifier = Modifier.size(16.dp))
+                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -143,6 +160,35 @@ fun ApplicantItem(
             text = { Text(worker.bio ?: "Bu kullanıcı henüz bir biyografi eklememiş.") },
             confirmButton = {
                 TextButton(onClick = { showBioDialog = false }) { Text("Kapat") }
+            }
+        )
+    }
+
+    // --- YORUMLAR PENCERESİ ---
+    if (showReviewsDialog) {
+        AlertDialog(
+            onDismissRequest = { showReviewsDialog = false },
+            title = { Text("${worker.name} Hakkında Yorumlar") },
+            text = {
+                if (reviews == null) {
+                    CircularProgressIndicator() // Yükleniyor
+                } else if (reviews.isEmpty()) {
+                    Text("Henüz yorum yapılmamış.")
+                } else {
+                    LazyColumn(modifier = Modifier.height(300.dp)) {
+                        items(reviews) { item ->
+                            Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                                Text(item.reviewerName, fontWeight = FontWeight.Bold)
+                                Text("⭐".repeat(item.review.score), style = MaterialTheme.typography.bodySmall)
+                                Text(item.review.comment ?: "", style = MaterialTheme.typography.bodyMedium)
+                                Divider()
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showReviewsDialog = false }) { Text("Kapat") }
             }
         )
     }

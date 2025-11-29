@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.profplay.isbasi.data.model.Job
 import com.profplay.isbasi.data.model.JobWithStatus
+import com.profplay.isbasi.data.model.ReviewWithReviewer
+import com.profplay.isbasi.data.model.User
 import com.profplay.isbasi.data.repository.SupabaseRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -24,7 +26,11 @@ class JobListViewModel(
     // UI state'ini tutacak Flow
     private val _uiState = MutableStateFlow<JobListUiState>(JobListUiState.Idle)
     val uiState: StateFlow<JobListUiState> = _uiState
+    private val _selectedEmployer = MutableStateFlow<User?>(null)
+    val selectedEmployer: StateFlow<User?> = _selectedEmployer
 
+    private val _selectedEmployerReviews = MutableStateFlow<List<ReviewWithReviewer>>(emptyList())
+    val selectedEmployerReviews: StateFlow<List<ReviewWithReviewer>> = _selectedEmployerReviews
     // --- Veri Yükleme Fonksiyonları ---
     /** İşveren için: Sadece kendi iş ilanlarını yükler. */
     fun loadJobsForEmployer(employerId: String) {
@@ -113,55 +119,54 @@ class JobListViewModel(
 
                 // 2. Verileri Paralel Çek (Async/Await)
                 // Bu blok bize bir Pair(Çift) döndürecek: (List<Job>, List<Application>)
-                val (allJobs, applications) = withContext(Dispatchers.IO) {
-                    val allJobsDeferred = async { repository.getAllJobs() }
-                    val applicationsDeferred = async { repository.getWorkerApplications(currentUserId) }
+                val (allJobs, applications, myReviews) = withContext(Dispatchers.IO) {
+                    val jobsDeferred = async { repository.getAllJobs() }
+                    val appsDeferred = async { repository.getWorkerApplications(currentUserId) }
+                    val reviewsDeferred = async { repository.getMyReviews(currentUserId) } // Benim yorumlarım
 
-                    // İki işlemin de bitmesini bekle ve sonuçları çift olarak döndür
-                    allJobsDeferred.await() to applicationsDeferred.await()
+                    Triple(jobsDeferred.await(), appsDeferred.await(), reviewsDeferred.await())
                 }
 
-                // 3. Başvuruları Map'e çevir (Hızlı erişim için)
+                val employerIds = allJobs.map { it.employerId }.distinct()
+                val employers = withContext(Dispatchers.IO) {
+                    repository.getUsersByIds(employerIds)
+                }
+
+                // 3. Map'ler oluştur (Hızlı eşleştirme için)
                 val applicationMap = applications.associate { it.jobId to it.status }
+                val employerMap = employers.associateBy { it.id } // ID -> User
+                val reviewMap = myReviews.associateBy { it.jobId } // JobID -> Review
 
-                // 4. Onaylanmış işlerin listesini çıkar (Çakışma kontrolü için)
-                // Status'u "approved" olan başvuruların job_id'lerini alıyoruz
-                val approvedJobIds = applications
-                    .filter { it.status == "approved" }
-                    .map { it.jobId }
-                    .toSet()
-
-                // Onaylanmış işlerin tam detaylarını bul
+                // 4. Onaylı işleri ayıkla (Çakışma kontrolü için)
+                val approvedJobIds = applications.filter { it.status == "approved" }.map { it.jobId }.toSet()
                 val approvedJobs = allJobs.filter { it.id in approvedJobIds }
 
-                // 5. İş Listesini Oluştur ve Çakışmaları Kontrol Et
+                // 5. HEPSİNİ BİRLEŞTİR
                 val jobsWithStatus = allJobs.map { job ->
                     val status = applicationMap[job.id]
+                    val employer = employerMap[job.employerId]
+                    val myExistingReview = reviewMap[job.id] // Bu işe yorum yapmış mıyım?
 
-                    // Çakışma var mı?
+                    // Çakışma Kontrolü
                     var isConflict = false
-
-                    // Eğer bu işe zaten onay almadıysak ve beklemede değilsek çakışma kontrolü yap
-                    // (Onaylı veya beklemede olan işin kendisiyle çakışması önemli değil)
                     if (status != "approved") {
                         isConflict = approvedJobs.any { approvedJob ->
-                            // approvedJob kendisi değilse kontrol et
-                            if (job.id != approvedJob.id) {
-                                checkOverlap(job, approvedJob)
-                            } else false
+                            if (job.id != approvedJob.id) checkOverlap(job, approvedJob) else false
                         }
                     }
 
                     JobWithStatus(
                         job = job,
                         applicationStatus = status,
-                        hasConflict = isConflict
+                        hasConflict = isConflict,
+                        // --- YENİ VERİLER ---
+                        employerRating = employer?.rating,
+                        myReview = myExistingReview
+                        // --------------------
                     )
                 }
-
-                // 6. UI State'i Güncelle
                 _uiState.value = JobListUiState.Success(jobsWithStatus)
-                Log.i("JobListViewModel", "loadAllJobs: ${jobsWithStatus.size} iş yüklendi.")
+                Log.i("JobListViewModel", "loadAllJobs: Veriler birleştirildi ve yüklendi.")
 
             } catch (e: Exception) {
                 Log.e("JobListViewModel", "loadAllJobs HATA: ${e.message}", e)
@@ -235,6 +240,39 @@ class JobListViewModel(
                 // Hata durumunda da listeyi yeniden yükleyebiliriz
                 loadAllJobs()
             }
+        }
+    }
+
+    fun submitReview(jobId: String, revieweeId: String, score: Int, comment: String) {
+        viewModelScope.launch {
+
+            val success = withContext(Dispatchers.IO) {
+                repository.submitReview(jobId, revieweeId, score, comment)
+            }
+            if (success) {
+                Log.i("JobListViewModel", "Puan başarıyla kaydedildi.")
+            } else {
+                Log.e("JobListViewModel", "Puan kaydedilemedi (Daha önce puanlanmış olabilir).")
+            }
+        }
+    }
+
+    fun loadEmployerInfo(employerId: String) {
+        viewModelScope.launch {
+            // Yükleniyor hissi vermek için önce boşaltalım
+            _selectedEmployer.value = null
+            _selectedEmployerReviews.value = emptyList()
+
+            // Paralel olarak Kullanıcı Bilgisini ve Yorumlarını çek
+            val (user, reviews) = withContext(Dispatchers.IO) {
+                val userDeferred = async { repository.getUserProfile(employerId) } // Bunu Repository'e eklemiştik
+                val reviewsDeferred = async { repository.getReviewsForUser(employerId) } // Bunu da eklemiştik
+
+                userDeferred.await() to reviewsDeferred.await()
+            }
+
+            _selectedEmployer.value = user
+            _selectedEmployerReviews.value = reviews
         }
     }
 }

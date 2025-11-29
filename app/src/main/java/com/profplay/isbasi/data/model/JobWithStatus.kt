@@ -3,5 +3,7 @@ package com.profplay.isbasi.data.model
 data class JobWithStatus(
     val job: Job,
     val applicationStatus: String?, // null, "pending", "approved", "rejected"
-    val hasConflict: Boolean = false
+    val hasConflict: Boolean = false,
+    val employerRating: Double? = null, // İşverenin Puanı
+    val myReview: Review? = null        // Benim bu işe yaptığım yorum (Varsa)
 )

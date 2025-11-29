@@ -13,6 +13,8 @@ import io.github.jan.supabase.postgrest.result.PostgrestResult
 import kotlinx.serialization.Serializable
 import kotlin.coroutines.cancellation.CancellationException
 import com.profplay.isbasi.data.model.Application
+import com.profplay.isbasi.data.model.Review
+import com.profplay.isbasi.data.model.ReviewWithReviewer
 import io.github.jan.supabase.postgrest.query.Columns
 
 
@@ -479,6 +481,100 @@ class SupabaseRepository (
         } catch (e: Exception) {
             Log.e("RepoDebug", "updateApplicationStatus HATA: ${e.message}", e)
             false
+        }
+    }
+
+    suspend fun getReviewsForUser(userId: String): List<ReviewWithReviewer> {
+        return try {
+            // Reviews tablosundan veriyi çek
+            val response = supabase.from("reviews").select {
+                filter { eq("reviewee_id", userId) }
+                order("created_at", Order.DESCENDING) // En yeniler üstte
+                limit(10) // Son 10 yorum yeterli
+            }
+
+            val reviews = response.decodeList<Review>()
+
+            if (reviews.isEmpty()) return emptyList()
+
+            // Yorum yapanların isimlerini bulmak için user tablosuna git
+            val reviewerIds = reviews.map { it.reviewerId }
+            val usersResponse = supabase.from("users").select {
+                filter { isIn("id", reviewerIds) }
+            }
+            val reviewers = usersResponse.decodeList<User>()
+            val reviewersMap = reviewers.associateBy { it.id }
+
+            // Yorum + İsim birleştir
+            reviews.map { review ->
+                ReviewWithReviewer(
+                    review = review,
+                    reviewerName = reviewersMap[review.reviewerId]?.name ?: "Anonim"
+                )
+            }
+        } catch (e: Exception) {
+            Log.e("RepoDebug", "getReviewsForUser HATA: ${e.message}")
+            emptyList()
+        }
+    }
+
+    suspend fun submitReview(
+        jobId: String,
+        revieweeId: String, // Kime puan veriliyor? (İşçi -> İşveren ID'si)
+        score: Int,
+        comment: String
+    ): Boolean {
+        val currentUserId = supabase.auth.currentUserOrNull()?.id ?: return false
+        return try {
+            Log.d("RepoDebug", "submitReview: Puan gönderiliyor... Kimden: $currentUserId Kime: $revieweeId İş: $jobId")
+            val review = Review(
+                jobId = jobId,
+                reviewerId = currentUserId,
+                revieweeId = revieweeId,
+                score = score,
+                comment = comment
+            )
+            supabase.from("reviews").insert(review)
+            Log.i("RepoDebug", "submitReview: BAŞARILI.")
+            true
+        } catch (e: Exception) {
+            // Eğer zaten puan vermişse veritabanı "unique constraint" hatası verir
+            Log.e("RepoDebug", "submitReview HATA: ${e.message}", e)
+            false
+        }
+    }
+
+    /** Kullanıcının yazdığı TÜM yorumları getirir (Hangi işlere yorum yapmışım?) */
+    suspend fun getMyReviews(reviewerId: String): List<Review> {
+        return try {
+            val response = supabase.from("reviews").select {
+                filter { eq("reviewer_id", reviewerId) }
+            }
+            response.decodeList<Review>()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /** Verilen ID listesine sahip kullanıcıları (İşverenleri) getirir (Puanları için) */
+    suspend fun getUsersByIds(userIds: List<String>): List<User> {
+        return try {
+            val response = supabase.from("users").select {
+                filter { isIn("id", userIds) }
+            }
+            response.decodeList<User>()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+    suspend fun getUserProfile(userId: String): User? {
+        return try {
+            val response = supabase.from("users").select {
+                filter { eq("id", userId) }
+            }
+            response.decodeList<User>().firstOrNull()
+        } catch (e: Exception) {
+            null
         }
     }
 

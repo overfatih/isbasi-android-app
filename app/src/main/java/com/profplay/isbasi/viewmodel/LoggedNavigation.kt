@@ -29,7 +29,9 @@ import com.profplay.isbasi.ui.screens.JobApplicantsScreen
 import com.profplay.isbasi.ui.screens.JobListLoadMode
 import com.profplay.isbasi.ui.screens.JobListScreen
 import com.profplay.isbasi.ui.screens.ProfileScreen
+import com.profplay.isbasi.ui.screens.SettingsScreen
 import com.profplay.isbasi.ui.screens.SupervisorScreen
+import com.profplay.isbasi.ui.screens.WeatherScreen
 
 @Composable
 fun LoggedInNavigation(authViewModel: AuthViewModel) {
@@ -60,6 +62,10 @@ fun LoggedInNavigation(authViewModel: AuthViewModel) {
                 val createJobViewModel: CreateJobViewModel = viewModel( factory = CreateJobViewModelFactory(repository) )
                 val jobListViewModel: JobListViewModel = viewModel( factory = JobListViewModelFactory(repository) )
                 val jobApplicantsViewModel: JobApplicantsViewModel = viewModel(factory = JobApplicantsViewModelFactory(repository))
+                val weatherRepository = com.profplay.isbasi.data.repository.WeatherRepository()
+                val weatherViewModel: com.profplay.isbasi.viewmodel.WeatherViewModel = viewModel(
+                    factory = com.profplay.isbasi.viewmodel.WeatherViewModelFactory(weatherRepository)
+                )
 
                 // --- LaunchedEffect currentUserId'yi DİNLİYOR ---
                 // currentUserId null'dan farklı bir değere değiştiğinde ÇALIŞIR
@@ -121,6 +127,15 @@ fun LoggedInNavigation(authViewModel: AuthViewModel) {
                                 jobId = jobId
                             )
                         }
+                    }
+                    composable("settings") {
+                        SettingsScreen(
+                            navController = navController,
+                            authViewModel = authViewModel
+                        )
+                    }
+                    composable("weather") {
+                        WeatherScreen(navController, weatherViewModel)
                     }
                 }
             }

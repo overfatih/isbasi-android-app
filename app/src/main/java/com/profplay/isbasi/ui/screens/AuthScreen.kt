@@ -9,11 +9,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -27,11 +33,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.profplay.isbasi.viewmodel.AuthUiState
 import com.profplay.isbasi.viewmodel.AuthViewModel
-
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.res.painterResource
+import com.profplay.isbasi.R
 @Composable
 fun AuthScreen(
     viewModel: AuthViewModel,
@@ -41,7 +52,9 @@ fun AuthScreen(
     var isSignUp by remember { mutableStateOf(false) }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
     var role by remember { mutableStateOf("employee") } //{admin, employer, employee, supervisor} {admin, işveren, işçi, dayıbaşı}
+
 
     Column(
         modifier = Modifier
@@ -50,6 +63,19 @@ fun AuthScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        Image(
+            painter = painterResource(id = R.mipmap.ic_launcher_foreground),
+            contentDescription = "Uygulama Logosu",
+            modifier = Modifier
+                .size(150.dp) // Boyutu ayarlayabilirsin
+                .padding(bottom = 32.dp)
+        )
+        Text(
+            text = "İşbaşı",
+            style = MaterialTheme.typography.headlineLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
         // 🔘 Switch ile giriş / kayıt geçişi
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -73,7 +99,25 @@ fun AuthScreen(
         TextField(
             value = password,
             onValueChange = { password = it },
-            label = { Text("Password") }
+            label = { Text("Şifre") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            // 1. Klavye Ayarı: Şifre olduğunu belirtir
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            // 2. Görünüm Ayarı: State'e göre gizle veya göster
+            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            // 3. Göz İkonu
+            trailingIcon = {
+                val image = if (passwordVisible)
+                    Icons.Filled.Visibility
+                else
+                    Icons.Filled.VisibilityOff
+
+                // İkona tıklanınca görünürlüğü tersine çevir
+                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                    Icon(imageVector = image, contentDescription = if (passwordVisible) "Gizle" else "Göster")
+                }
+            }
         )
         Spacer(modifier = Modifier.height(8.dp))
         // 🔽 Role dropdown sadece kayıt modunda gösterilir
@@ -121,8 +165,8 @@ fun RoleDropdown(
 ) {
     val roles = listOf(
         "işçi" to "employee",
-        "işveren" to "employer",
-        "dayıbaşı" to "supervisor"
+        "işveren" to "employer"
+        /*"dayıbaşı" to "supervisor"*/
     )
 
     var expanded by remember { mutableStateOf(false) }

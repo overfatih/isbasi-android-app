@@ -43,8 +43,9 @@ fun SettingsScreen(
     var showDeleteAccountDialog by remember { mutableStateOf(false) }
 
     // Google Play ve Hukuki Linkler (Kendi linklerinle değiştirmelisin)
-    val privacyPolicyUrl = "https://senin-siten.com/privacy-policy"
-    val dataDeletionUrl = "https://senin-siten.com/delete-account-request"
+    val privacyPolicyUrl = "https://profplay.com/apps/isbasi/privacy-policy-isbasi.html"
+    val termsConditionUrl = "https://profplay.com/apps/isbasi/terms-conditions-isbasi.html"
+    val dataDeletionUrl = "https://profplay.com/delete_account.html"
 
     Scaffold(
         topBar = {
@@ -92,9 +93,9 @@ fun SettingsScreen(
             )
 
             SettingsItem(
-                title = "Veri Güvenliği",
+                title = "Şartlar ve Koşullar",
                 icon = Icons.Default.Lock,
-                onClick = { uriHandler.openUri(privacyPolicyUrl) } // Genelde gizlilik politikası içindedir
+                onClick = { uriHandler.openUri(termsConditionUrl) } // Genelde gizlilik politikası içindedir
             )
 
             SettingsItem(

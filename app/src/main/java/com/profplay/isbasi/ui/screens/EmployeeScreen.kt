@@ -1,5 +1,6 @@
 package com.profplay.isbasi.ui.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -13,10 +14,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.profplay.isbasi.R
 import com.profplay.isbasi.viewmodel.AuthViewModel
 import com.profplay.isbasi.viewmodel.HumansViewModel
 
@@ -38,15 +43,33 @@ fun EmployeeScreen(
             modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "Hoş geldin, Emekçi",
-                    style = MaterialTheme.typography.labelMedium
-                )
-                Text(
-                    text = humanMe?.name ?: "Kullanıcı",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
+            // Yan yana dizmek için Row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // SOL TARAF
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Hoş geldin, Emekçi",
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                    Text(
+                        text = humanMe?.name ?: "Kullanıcı",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
+
+                // SAĞ TARAF (Logo)
+                Image(
+                    painter = painterResource(id = R.drawable.logo_i2),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(60.dp)
                 )
             }
         }
@@ -86,7 +109,7 @@ fun EmployeeScreen(
                     title = "Hava Durumu",
                     icon = Icons.Default.WbSunny,
                     backgroundColor = Color(0xFFFFF9C4),
-                    contentColor = Color(0xFFF57F17),
+                    contentColor = Color(0xFFC69D4D),
                     onClick = { navController.navigate("weather") }
                 )
             }

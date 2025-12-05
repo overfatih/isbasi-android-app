@@ -40,8 +40,14 @@ import androidx.compose.ui.unit.dp
 import com.profplay.isbasi.viewmodel.AuthUiState
 import com.profplay.isbasi.viewmodel.AuthViewModel
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import com.profplay.isbasi.R
 @Composable
 fun AuthScreen(
@@ -55,7 +61,12 @@ fun AuthScreen(
     var passwordVisible by remember { mutableStateOf(false) }
     var role by remember { mutableStateOf("employee") } //{admin, employer, employee, supervisor} {admin, işveren, işçi, dayıbaşı}
 
+    // EKRAN BOYUTUNU ALMA
+    val configuration = LocalConfiguration.current
+    val screenWidth = configuration.screenWidthDp.dp
 
+    // Logo boyutunu ekran genişliğinin %40'ı olarak ayarla (Bayağı büyük olur)
+    val logoSize = screenWidth * 0.50f
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -64,36 +75,35 @@ fun AuthScreen(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Image(
-            painter = painterResource(id = R.mipmap.ic_launcher_foreground),
-            contentDescription = "Uygulama Logosu",
+            painter = painterResource(id = R.drawable.logo_i2_sbasi2), // Birleşik logo
+            contentDescription = "İşbaşı Logosu",
+            contentScale = ContentScale.Fit, // Orantıyı bozmadan sığdır
             modifier = Modifier
-                .size(150.dp) // Boyutu ayarlayabilirsin
-                .padding(bottom = 32.dp)
+                .width(logoSize) // Genişliği ayarla (yükseklik orantılı gelir)
+                // Eğer kare değilse .size(logoSize) yerine .width() daha güvenlidir
+                .padding(bottom = 48.dp)
         )
-        Text(
-            text = "İşbaşı",
-            style = MaterialTheme.typography.headlineLarge,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+
         // 🔘 Switch ile giriş / kayıt geçişi
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Giriş", style = MaterialTheme.typography.bodyMedium)
+            Text("Giriş  ", style = MaterialTheme.typography.bodyMedium)
             Switch(
                 checked = isSignUp,
                 onCheckedChange = { isSignUp = it }
             )
-            Text("Kayıt Ol", style = MaterialTheme.typography.bodyMedium)
+            Text("  Kayıt Ol", style = MaterialTheme.typography.bodyMedium)
         }
 
         TextField(
             value = email,
             onValueChange = { email = it },
-            label = { Text("Email") }
+            label = { Text("Email") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
         )
         Spacer(modifier = Modifier.height(8.dp))
         TextField(
@@ -102,11 +112,8 @@ fun AuthScreen(
             label = { Text("Şifre") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            // 1. Klavye Ayarı: Şifre olduğunu belirtir
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            // 2. Görünüm Ayarı: State'e göre gizle veya göster
             visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-            // 3. Göz İkonu
             trailingIcon = {
                 val image = if (passwordVisible)
                     Icons.Filled.Visibility
